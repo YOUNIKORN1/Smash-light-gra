@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Smash Lights Pro</title>
+    <style>
+        :root { 
+            --neon-color: #00ffff; 
+            --bg-dark: #000000; 
+            --penalty-color: #ff0000;
+        }
+        
+        body {
+            margin: 0; background: var(--bg-dark); color: #fff;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            height: 100vh; overflow: hidden; touch-action: manipulation;
+            display: flex; flex-direction: column; align-items: center;
+            -webkit-user-select: none;
+        }
+
+        .view { display: none; flex-direction: column; align-items: center; width: 100%; height: 100%; position: absolute; top: 0; }
+        .view.active { display: flex; }
+
+        /* PANEL GÓRNY */
+        .header-panel {
+            width: 100%; background: linear-gradient(to bottom, #1a2a36 0%, #050a0e 100%);
+            display: grid; grid-template-columns: 1fr 1fr 1fr;
+            padding: env(safe-area-inset-top) 0 12px 0; border-bottom: 2px solid #111;
+        }
+        .stat-box { text-align: center; border-right: 1px solid #1a2a36; padding-top: 10px; }
+        .stat-box:last-child { border-right: none; }
+        .stat-label { font-size: 10px; color: #ffcc00; font-weight: bold; text-transform: uppercase; }
+        .stat-value { font-size: 18px; font-weight: bold; font-family: 'Courier New', monospace; }
+        .countdown-main { color: var(--neon-color); text-shadow: 0 0 10px var(--neon-color); }
+
+        .exit-btn {
+            position: absolute; top: calc(env(safe-area-inset-top) + 12px); left: 12px; 
+            background: rgba(255,255,255,0.1); border: 1px solid #444; color: #fff; 
+            padding: 5px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; z-index: 100;
+        }
+
+        #grid-container { flex-grow: 1; display: flex; align-items: center; justify-content: center; width: 100%; }
+        #grid {
+            display: grid; gap: 12px; width: 92vw; max-width: 400px; aspect-ratio: 1/1;
+            background: #080808; padding: 14px; border-radius: 25px;
+            border: 4px solid transparent; transition: border-color 0.1s;
+        }
+        
+        #grid.penalty-border { border-color: var(--penalty-color); box-shadow: 0 0 20px var(--penalty-color); }
+        #grid.locked { pointer-events: none; }
+
+        .tile {
+            background: #020202; border: 2px solid #1a1a1a; border-radius: 22px;
+            display: flex; align-items: center; justify-content: center;
+            position: relative; transition: all 0.05s;
+        }
+
+        .tile::after {
+            content: ''; width: 8px; height: 8px; background: #151515;
+            border-radius: 2px; transition: all 0.1s;
+        }
+
+        .tile.active {
+            border: 6px solid #fff; 
+            box-shadow: 0 0 15px var(--neon-color), 0 0 30px var(--neon-color), inset 0 0 15px var(--neon-color);
+            z-index: 2;
+        }
+        .tile.active::after { 
+            background: #fff; 
+            box-shadow: 0 0 10px #fff, 0 0 20px var(--neon-color); 
+        }
+
+        .preview-box {
+            width: 25%; height: 25%; border: 4px solid var(--neon-color); 
+            background: rgba(255, 255, 255, 0.1); border-radius: 8px;
+            display: none; box-shadow: 0 0 12px var(--neon-color); position: absolute;
+        }
+        .tile.next-preview .preview-box { display: block; }
+        .tile.next-preview::after { opacity: 0; }
+
+        .menu-btn {
+            width: 260px; padding: 16px; margin: 8px; background: #111;
+            border: 1px solid var(--neon-color); color: var(--neon-color);
+            border-radius: 12px; font-weight: bold; cursor: pointer;
+            transition: opacity 0.3s;
+        }
+        .menu-btn:disabled { opacity: 0.3; pointer-events: none; border-color: #333; color: #333; }
+
+        table { width: 85%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
+        th { border-bottom: 2px solid var(--neon-color); color: var(--neon-color); padding: 8px; text-align: left; }
+        td { padding: 8px; border-bottom: 1px solid #222; }
+
+        #countdown-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.3);
+            display: none; align-items: center; justify-content: center; 
+            font-size: 120px; font-weight: bold; color: #fff;
+            text-shadow: 0 0 25px rgba(0,0,0,0.8); z-index: 1000;
+            pointer-events: none;
+        }
+        .color-dot { width: 45px; height: 45px; border-radius: 50%; border: 2px solid #fff; margin: 8px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="countdown-overlay">3</div>
+
+    <div id="view-menu" class="view active" style="justify-content: center;">
+        <h1 style="color:var(--neon-color); text-shadow: 0 0 10px var(--neon-color);">SMASH LIGHTS</h1>
+        <button class="menu-btn" onclick="showView('view-modes')">WYBIERZ TRYB</button>
+        <button class="menu-btn" onclick="showView('view-scores')">RANKINGI</button>
+        <button class="menu-btn" onclick="showView('view-settings')">USTAWIENIA</button>
+    </div>
+
+    <div id="view-modes" class="view" style="justify-content: center;">
+        <div class="exit-btn" onclick="showView('view-menu')"> Back </div>
+        <button class="menu-btn" onclick="initGame(2)">2 x 2</button>
+        <button class="menu-btn" onclick="initGame(3)">3 x 3</button>
+        <button class="menu-btn" onclick="initGame(4)">4 x 4 (PRO)</button>
+        <button class="menu-btn" onclick="initGame(5)">5 x 5</button>
+    </div>
+
+    <div id="view-game" class="view">
+        <div class="exit-btn" onclick="exitGame()"> STOP </div>
+        <div class="header-panel">
+            <div class="stat-box"><div class="stat-label">BEST</div><div id="best-val" class="stat-value">--:--</div></div>
+            <div class="stat-box"><div class="stat-label">LEFT</div><div id="count-val" class="stat-value countdown-main">100</div></div>
+            <div class="stat-box"><div class="stat-label">TIME</div><div id="time-val" class="stat-value">0:00.000</div></div>
+        </div>
+        <div id="grid-container"><div id="grid"></div></div>
+    </div>
+
+    <div id="view-victory" class="view" style="justify-content: center;">
+        <h2 style="color:var(--neon-color)">FINISH!</h2>
+        <div id="final-time" style="font-size: 40px; margin-bottom: 30px;">0:00.000</div>
+        <button id="victory-replay" class="menu-btn" onclick="showView('view-modes')">ZAGRAJ ZNOWU</button>
+        <button id="victory-home" class="menu-btn" onclick="showView('view-menu')">MENU</button>
+    </div>
+
+    <div id="view-settings" class="view" style="justify-content: center;">
+        <div class="exit-btn" onclick="showView('view-menu')"> Back </div>
+        <h2>KOLOR NEONU</h2>
+        <div style="display: flex; flex-wrap: wrap; justify-content: center; max-width: 300px;">
+            <div class="color-dot" style="background:#00ffff" onclick="setGlobalColor('#00ffff')"></div>
+            <div class="color-dot" style="background:#39ff14" onclick="setGlobalColor('#39ff14')"></div>
+            <div class="color-dot" style="background:#ff00ff" onclick="setGlobalColor('#ff00ff')"></div>
+            <div class="color-dot" style="background:#ffff00" onclick="setGlobalColor('#ffff00')"></div>
+            <div class="color-dot" style="background:#ff3131" onclick="setGlobalColor('#ff3131')"></div>
+            <div class="color-dot" style="background:#ffffff" onclick="setGlobalColor('#ffffff')"></div>
+        </div>
+    </div>
+
+    <div id="view-scores" class="view" style="padding-top:80px; overflow-y: auto;">
+        <div class="exit-btn" onclick="showView('view-menu')"> Back </div>
+        <h2>RANKINGI</h2>
+        <div id="highscore-tables"></div>
+    </div>
+
+    <script>
+        let config = { size: 4, count: 100, current: -1, next: -1, active: false, timer: null, start: 0, penalty: false };
+        let scores = JSON.parse(localStorage.getItem('smash_scores_v7')) || { '2': [], '3': [], '4': [], '5': [] };
+        const preview = document.createElement('div'); preview.className = 'preview-box';
+
+        function showView(id) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            if(id === 'view-scores') displayScores();
+        }
+
+        function setGlobalColor(color) {
+            document.documentElement.style.setProperty('--neon-color', color);
+            localStorage.setItem('smash_color', color);
+        }
+
+        function exitGame() {
+            config.active = false; clearInterval(config.timer);
+            showView('view-menu');
+        }
+
+        function initGame(size) {
+            config.size = size;
+            config.active = false; // Jeszcze nie gramy
+            showView('view-game');
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+            grid.classList.remove('locked', 'penalty-border');
+            grid.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+            
+            for(let i=0; i<size*size; i++) {
+                let t = document.createElement('div');
+                t.className = 'tile'; t.id = 't'+i;
+                t.onmousedown = t.ontouchstart = (e) => { e.preventDefault(); hit(i); };
+                grid.appendChild(t);
+            }
+
+            // Losujemy i pokazujemy pierwszy kafel JUŻ TERAZ
+            config.count = 100;
+            config.current = Math.floor(Math.random()*(size*size));
+            pickNext();
+            update();
+
+            let best = scores[size][0];
+            document.getElementById('best-val').innerText = best ? formatTime(best) : "--:---";
+            document.getElementById('time-val').innerText = "0:00.000";
+            
+            startCountdown();
+        }
+
+        function startCountdown() {
+            let ov = document.getElementById('countdown-overlay');
+            ov.style.display = 'flex';
+            let c = 3; ov.innerText = c;
+            let i = setInterval(() => {
+                c--;
+                if(c > 0) ov.innerText = c;
+                else { 
+                    clearInterval(i); 
+                    ov.style.display = 'none'; 
+                    run(); 
+                }
+            }, 600);
+        }
+
+        function run() {
+            config.active = true;
+            config.start = performance.now();
+            config.timer = setInterval(() => {
+                if(!config.active) return;
+                let diff = (performance.now() - config.start) / 1000;
+                document.getElementById('time-val').innerText = formatTime(diff);
+            }, 10);
+        }
+
+        function pickNext() {
+            let n; do { n = Math.floor(Math.random()*(config.size*config.size)); } while(n === config.current);
+            config.next = n;
+        }
+
+        function update() {
+            document.querySelectorAll('.tile').forEach(t => t.classList.remove('active', 'next-preview'));
+            const ct = document.getElementById('t'+config.current);
+            if(ct) ct.classList.add('active');
+            
+            const nt = document.getElementById('t'+config.next);
+            if(nt) {
+                nt.classList.add('next-preview');
+                nt.appendChild(preview);
+            }
+            document.getElementById('count-val').innerText = config.count;
+        }
+
+        function hit(i) {
+            if(!config.active || config.penalty) return;
+            if(i === config.current) {
+                config.count--;
+                if(config.count <= 0) win();
+                else { config.current = config.next; pickNext(); update(); }
+            } else {
+                triggerPenalty();
+            }
+        }
+
+        function triggerPenalty() {
+            config.penalty = true;
+            const grid = document.getElementById('grid');
+            grid.classList.add('locked', 'penalty-border');
+            setTimeout(() => {
+                config.penalty = false;
+                grid.classList.remove('locked', 'penalty-border');
+            }, 500); 
+        }
+
+        function win() {
+            config.active = false; clearInterval(config.timer);
+            let total = (performance.now() - config.start) / 1000;
+            document.getElementById('final-time').innerText = formatTime(total);
+            scores[config.size].push(total);
+            scores[config.size].sort((a,b)=>a-b);
+            scores[config.size] = scores[config.size].slice(0, 5);
+            localStorage.setItem('smash_scores_v7', JSON.stringify(scores));
+            
+            const btn1 = document.getElementById('victory-replay');
+            const btn2 = document.getElementById('victory-home');
+            btn1.disabled = true; btn2.disabled = true;
+            
+            showView('view-victory');
+            
+            setTimeout(() => {
+                btn1.disabled = false; btn2.disabled = false;
+            }, 1500);
+        }
+
+        function formatTime(s) {
+            let m = Math.floor(s/60);
+            let sec = (s%60).toFixed(3);
+            return `${m}:${sec.padStart(6, '0')}`;
+        }
+
+        function displayScores() {
+            const cont = document.getElementById('highscore-tables');
+            cont.innerHTML = '';
+            for(let m in scores) {
+                if(scores[m].length === 0) continue;
+                let h = `<table><tr><th colspan="2">TRYB ${m}x${m}</th></tr>`;
+                scores[m].forEach((s, i) => h += `<tr><td>${i+1}.</td><td>${formatTime(s)}</td></tr>`);
+                cont.innerHTML += h + `</table>`;
+            }
+        }
+
+        const sc = localStorage.getItem('smash_color');
+        if(sc) setGlobalColor(sc);
+    </script>
+</body>
+</html>
